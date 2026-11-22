@@ -1,0 +1,12 @@
+{
+  "name": "nafdist-tracker",
+  "version": "1.0.0",
+  "description": "Attendance and work tracker for Nafdist Pvt Ltd",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mongodb": "^6.12.0"
+  }
+}

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nafdist Attendance Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: brand header, sticky glass nav, date block, then one block per person / work entry */
+:root{
+  --bg:#edf1f6;--surface:#ffffff;--panel:#f3f5f9;--ink:#18212f;--mut:#5f6b7c;--line:#dce2eb;
+  --acc:#1f3a5f;--acc-ink:#ffffff;--acc-soft:#eef2f7;
+  --ok:#1b7f5a;--bad:#b4382e;
+  --glass:rgba(255,255,255,.72);--glass-line:rgba(20,30,50,.10);--glass-shadow:0 4px 18px rgba(20,30,50,.08);
+  --f:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1319;--surface:#161b23;--panel:#1c222c;--ink:#e8ecf2;--mut:#97a1b0;--line:#272f3b;
+  --acc:#8fb2e8;--acc-ink:#0f1319;--acc-soft:#1f2937;--ok:#4cd3a0;--bad:#ff8a7d;
+  --glass:rgba(22,27,35,.7);--glass-line:rgba(255,255,255,.10);--glass-shadow:0 4px 18px rgba(0,0,0,.4);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1319;--surface:#161b23;--panel:#1c222c;--ink:#e8ecf2;--mut:#97a1b0;--line:#272f3b;
+  --acc:#8fb2e8;--acc-ink:#0f1319;--acc-soft:#1f2937;--ok:#4cd3a0;--bad:#ff8a7d;
+  --glass:rgba(22,27,35,.7);--glass-line:rgba(255,255,255,.10);--glass-shadow:0 4px 18px rgba(0,0,0,.4);color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--f);min-height:100%}
+.wrap{max-width:980px;margin:0 auto;padding:0 16px}
+
+.brand{padding:28px 0 12px;text-align:center}
+.brand h1{margin:0;font:800 clamp(28px,6vw,40px)/1.15 var(--f);letter-spacing:.01em;text-transform:uppercase}
+.brand p{margin:8px auto 0;max-width:760px;text-wrap:balance;color:var(--ink);font-size:15px;font-weight:500}
+
+.navwrap{position:sticky;top:0;z-index:20;padding:8px 0}
+.nav{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--glass);border:1px solid var(--glass-line);
+  box-shadow:var(--glass-shadow);-webkit-backdrop-filter:blur(14px) saturate(160%);backdrop-filter:blur(14px) saturate(160%)}
+.nav button{flex:1;border:0;background:transparent;color:var(--ink);font:600 14px var(--f);padding:10px 8px;border-radius:9px;cursor:pointer}
+.nav button:hover{background:var(--acc-soft)}
+.nav button.on{background:var(--acc);color:var(--acc-ink)}
+.nav button:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+input,select,button,textarea{font:inherit;color:var(--ink)}
+input[type=date],input[type=month],input[type=time],input[type=number],input[type=text],select,textarea{
+  width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;min-width:0}
+textarea{min-height:70px;resize:vertical}
+input:disabled,select:disabled{background:var(--panel);color:var(--mut)}
+label.f{display:block;font-size:12px;color:var(--mut);margin-bottom:4px}
+.btn{border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px}
+.btn:hover{background:var(--panel)}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{margin:0 0 12px;font-size:17px;font-weight:700}
+.stack{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding-bottom:48px}
+.hide{display:none!important}
+
+.datebar{display:flex;flex-wrap:wrap;gap:16px 24px;align-items:flex-end}
+.datebar input[type=date]{width:190px}
+.datebar .grp{display:grid;gap:2px}
+.dayshow{font-size:20px;font-weight:700;min-width:110px;padding:6px 0}
+.hint{margin:10px 0 0;color:var(--mut);font-size:13px}
+.err{color:var(--bad);font-size:12px;min-height:16px;margin-top:2px}
+.dbtns{display:flex;gap:6px}
+
+.stats{display:flex;flex-wrap:wrap;gap:8px 24px;padding:4px 2px}
+.stat span{display:block;color:var(--mut);font-size:12px}
+.stat b{font-size:24px;font-weight:700}
+.stat.otb input{width:90px;margin-top:2px}
+
+.people{display:grid;gap:10px}
+.person{display:grid;grid-template-columns:200px 1fr;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pn{background:var(--panel);border-right:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;font-size:17px;font-weight:700}
+.pf{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr .8fr;gap:12px;padding:12px 16px;align-items:end}
+.hrs b{display:block;font-size:20px;padding:6px 0}
+.sel{font-weight:600}
+.sel.p{color:var(--ok)}
+.sel.a{color:var(--bad)}
+
+.datebadge{display:inline-block;background:var(--panel);padding:4px 12px;border-radius:999px;font-weight:600;font-size:13px;margin-bottom:12px}
+.entries{display:grid;gap:10px}
+.entry{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.ehead{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 14px;font-size:13px;font-weight:600;color:var(--mut)}
+.egrid{display:grid;grid-template-columns:2fr 3fr 1.2fr 1.2fr 1fr;gap:12px;padding:14px}
+.x{border:0;background:none;color:var(--bad);cursor:pointer;font-weight:600;font-size:13px}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.chip{background:var(--panel);border-radius:999px;padding:4px 6px 4px 12px;display:flex;gap:6px;align-items:center;font-size:13px}
+.chip button{border:0;background:none;cursor:pointer;color:var(--mut);font-size:15px;line-height:1}
+.addrow{display:flex;gap:8px}
+
+.mbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.mbar input[type=month]{max-width:200px}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:12px;color:var(--mut);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.tot{font-weight:700;background:var(--panel)}
+.mt td.d{text-align:center;padding:7px 4px;min-width:34px;font-variant-numeric:tabular-nums}
+.mt td.n,.mt th.n{position:sticky;left:0;background:var(--surface);font-weight:600;z-index:1}
+.mt .abs{color:var(--mut)}
+.mt tfoot td{font-weight:700;background:var(--panel)}
+.sub{color:var(--mut);font-size:13px}
+.status{font-size:12px;color:var(--mut);text-align:center;padding-bottom:6px}
+.warn{background:#fdeceb;color:var(--bad);padding:10px 14px;border-radius:10px;margin-bottom:12px;font-size:13px}
+
+@media (max-width:720px){
+  .datebar input[type=date]{width:100%}
+  .datebar .grp{flex:1 1 140px}
+  .dbtns{width:100%}.dbtns .btn{flex:1}
+  .person{grid-template-columns:1fr}
+  .pn{border-right:0;border-bottom:1px solid var(--line);padding:10px 16px}
+  .pf{grid-template-columns:1fr 1fr}
+  .egrid{grid-template-columns:1fr 1fr}
+  .egrid .wide{grid-column:1/-1}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.tblcard{padding:0;overflow:hidden}
+table.att{min-width:640px}
+table.att th{background:var(--panel);padding:12px 14px;border-bottom:1px solid var(--line)}
+table.att td{padding:10px 14px;vertical-align:middle}
+table.att tbody tr:nth-child(even){background:color-mix(in srgb,var(--panel) 45%,var(--surface))}
+table.att tbody tr:last-child td{border-bottom:0}
+table.att td.nm{font-weight:700;font-size:16px}
+table.att select{width:130px}
+table.att input[type=time]{width:130px}
+table.att input[type=number]{width:90px}
+table.att td.hrs{font-weight:700;font-size:18px}
+@media (max-width:720px){
+  table.att{min-width:0}
+  table.att th,table.att td{padding:8px 6px}
+  table.att select,table.att input[type=time],table.att input[type=number]{width:100%;min-width:88px;padding:6px 4px;font-size:13px}
+  table.att td.nm{font-size:14px}
+}
+
+.mt th.d{text-align:center;padding:8px 2px;min-width:30px}
+.mt th.d small{display:block;font-weight:500;font-size:10px;opacity:.8}
+.mt td.d{min-width:30px}
+.mt .sun{background:var(--panel)}
+.cp{color:var(--ok);font-weight:700}
+.ca{color:var(--bad);font-weight:700}
+.legend{margin:10px 0 0;font-size:13px}
+.pdet{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.pdet summary{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;cursor:pointer;background:var(--panel);list-style:none}
+.pdet summary::-webkit-details-marker{display:none}
+.pdet summary::before{content:"▸";color:var(--mut);transition:transform .15s}
+.pdet[open] summary::before{transform:rotate(90deg)}
+.pdet[open] summary{border-bottom:1px solid var(--line)}
+.pname2{font-weight:700;font-size:16px;flex:1 1 110px}
+.tg{padding:3px 10px;border-radius:999px;font-size:13px;font-weight:600;background:var(--surface);border:1px solid var(--line)}
+.tg.ok{color:var(--ok)}.tg.bad{color:var(--bad)}
+.pdet tfoot td{font-weight:700;background:var(--panel)}
+
+body{font-variant-numeric:tabular-nums}
+.card{box-shadow:0 1px 3px rgba(20,35,60,.07)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;padding:0}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px;box-shadow:0 1px 3px rgba(20,35,60,.07)}
+.stat b{display:block;font-size:26px;font-weight:700;line-height:1.2}
+.brand h1{font-weight:700;letter-spacing:.03em}
+.pdet{box-shadow:none}
+
+.mbar select{width:auto;min-width:130px;font-weight:600}
+.h3{font-size:15px;margin:20px 0 8px}
+.mrow{cursor:pointer}.mrow:hover td{background:var(--panel)}
+.mrow.cur td{background:var(--acc-soft)}
+.dd{display:block;font-size:11px;color:var(--mut);font-weight:500}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="brand">
+    <h1>Nafdist Pvt Ltd</h1>
+    <p>C-25, 6TH PHASE INDUSTRIAL AREA, GAMHARIA, JAMSHEDPUR, Jharkhand, India - 832108</p>
+  </header>
+
+  <div class="navwrap">
+    <nav class="nav" aria-label="Sections">
+      <button class="on" data-v="attendance">Attendance Register</button>
+      <button data-v="work">Work Log</button>
+      <button data-v="monthly">Monthly Report</button>
+    </nav>
+  </div>
+  <div id="status" class="status">Loading…</div>
+  <div id="warn" class="warn hide"></div>
+
+  <div class="stack">
+    <section class="card" id="datecard">
+      <div class="datebar">
+        <div class="grp">
+          <label class="f" for="date">Date</label>
+          <input type="date" id="date">
+        </div>
+        <div class="grp">
+          <label class="f">Day</label>
+          <div id="dayshow" class="dayshow"></div>
+        </div>
+        <div class="dbtns">
+          <button class="btn" id="prev" aria-label="Previous day">‹ Prev</button>
+          <button class="btn" id="today">Today</button>
+          <button class="btn" id="next" aria-label="Next day">Next ›</button>
+        </div>
+      </div>
+      <p class="hint">Choose the date from the calendar. The day of the week fills in on its own.</p>
+    </section>
+
+    <section id="attendance" class="stack" style="padding:0">
+      <div class="stats">
+        <div class="stat"><span>Present</span><b id="sPresent">0</b></div>
+        <div class="stat"><span>Absent</span><b id="sAbsent">0</b></div>
+        <div class="stat"><span>Hours today</span><b id="sHours">0</b></div>
+        <div class="stat otb"><span>Overtime (OT)</span><input type="number" id="ot" min="0" step="0.5" placeholder="0" aria-label="Overtime"></div>
+      </div>
+      <div class="card tblcard"><div class="tw"><table id="people" class="att"></table></div></div>
+      <details class="card">
+        <summary style="cursor:pointer;font-weight:600">Manage people</summary>
+        <div id="chips" class="chips"></div>
+        <div class="addrow"><input type="text" id="newName" placeholder="New name"><button class="btn" id="addName">Add</button></div>
+      </details>
+    </section>
+
+    <section id="work" class="card hide">
+      <h2>Work done</h2>
+      <div class="datebadge" id="workdate"></div>
+      <div id="entries" class="entries"></div>
+      <div style="margin:12px 0"><button class="btn pri" id="addWork">+ Add work entry</button></div>
+      <label class="f" for="note">Remarks</label>
+      <textarea id="note" placeholder="Anything else about the day"></textarea>
+      <datalist id="procs"><option value="Mixing"></option></datalist>
+    </section>
+
+    <section id="monthly" class="stack hide" style="padding:0">
+      <div class="card">
+        <div class="mbar">
+          <button class="btn" id="mprev" aria-label="Previous month">‹</button>
+          <select id="mm" aria-label="Month"></select>
+          <select id="yy" aria-label="Year"></select>
+          <button class="btn" id="mnext" aria-label="Next month">›</button>
+          <button class="btn" id="copy">Copy summary</button>
+          <span id="copied" class="sub"></span>
+        </div>
+      </div>
+      <div class="stats" id="mstats"></div>
+      <div class="card">
+        <h2 id="mtitle">Attendance sheet</h2>
+        <div class="tw"><table id="mgrid" class="mt"></table></div>
+        <p class="legend"><span class="cp">P</span> Present &nbsp; <span class="ca">A</span> Absent &nbsp; <span class="sub">blank = no entry made for that day</span></p>
+      </div>
+      <div class="card">
+        <h2>Person-wise details</h2>
+        <div id="mpeople"></div>
+      </div>
+      <div class="card">
+        <h2 id="ytitle">Year overview</h2>
+        <p class="sub" style="margin:-6px 0 10px">All months at a glance. Click a month to open it.</p>
+        <div class="tw"><table id="ymonths"></table></div>
+        <h3 class="h3">Hours per person, month by month</h3>
+        <div class="tw"><table id="ypeople"></table></div>
+      </div>
+      <div class="card"><h2>Work done, month total</h2><div class="tw"><table id="mwork"></table></div></div>
+    </section>
+  </div>
+</div>
+
+<div id="login" class="hide" style="position:fixed;inset:0;z-index:50;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px">
+  <form id="loginform" class="card" style="width:100%;max-width:340px">
+    <h2>Enter password</h2>
+    <label class="f" for="pw">Password</label>
+    <input type="password" id="pw" autocomplete="current-password">
+    <div id="loginerr" class="err" style="margin:6px 0"></div>
+    <button class="btn pri" type="submit" style="width:100%">Open tracker</button>
+  </form>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const fmtDate=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const show=s=>{const [y,m,d]=s.split('-');return d+'/'+m+'/'+y};
+const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const DEF_FROM='06:00',DEF_TO='17:00';
+const UNITS=['kg','ton','pcs','m','litre'];
+
+let db=null, staff=[], days={}, cur=fmtDate(new Date()), month=cur.slice(0,7), view='attendance';
+let ver={}, saved={}, timers={}, busy={};
+
+function setStatus(t){$('#status').textContent=t}
+function getDay(d){return days[d]||(days[d]={date:d,rows:[],ot:0,work:[],note:''})}
+function rowFor(day,name){let r=day.rows.find(x=>x.name===name);if(!r){r={name,status:'A',from:'',to:'',brk:0};day.rows.push(r)}return r}
+function hrs(r){
+  if(!r||r.status!=='P'||!r.from||!r.to)return 0;
+  const [a,b]=r.from.split(':').map(Number),[c,d]=r.to.split(':').map(Number);
+  let m=(c*60+d)-(a*60+b); if(m<=0)m+=1440;
+  m-=(Number(r.brk)||0)*60;
+  return Math.max(0,m)/60;
+}
+const r2=x=>Math.round(x*100)/100;
+const fh=x=>{x=r2(x);return Number.isInteger(x)?String(x):x.toFixed(2).replace(/0$/,'')};
+
+/* ---------- saving ---------- */
+function touch(d){ver[d]=(ver[d]||0)+1;setStatus('Saving…');clearTimeout(timers[d]);timers[d]=setTimeout(()=>flush(d),500)}
+async function flush(d){
+  if(busy[d]){timers[d]=setTimeout(()=>flush(d),300);return}
+  busy[d]=true;const v=ver[d];
+  try{await req('PUT','/api/days/'+d,getDay(d));if(ver[d]===v){saved[d]=v;setStatus('All changes saved')}}
+  catch(e){setStatus('Could not save: '+(e&&e.code||'error'))}
+  busy[d]=false;
+}
+async function saveStaff(){
+  try{await req('PUT','/api/staff',{names:staff});setStatus('All changes saved')}catch(e){setStatus('Could not save: '+(e&&e.code||'error'))}
+}
+const isDirty=d=>(ver[d]||0)!==(saved[d]||0);
+
+/* ---------- date bar ---------- */
+function syncDateBar(){
+  $('#date').value=cur;
+  $('#dayshow').textContent=DAYS[parse(cur).getDay()];
+  $('#workdate').textContent=DAYS[parse(cur).getDay()]+', '+show(cur);
+}
+function go(d){cur=d;syncDateBar();renderDaily()}
+$('#date').onchange=e=>{if(e.target.value)go(e.target.value)};
+$('#prev').onclick=()=>{const d=parse(cur);d.setDate(d.getDate()-1);go(fmtDate(d))};
+$('#next').onclick=()=>{const d=parse(cur);d.setDate(d.getDate()+1);go(fmtDate(d))};
+$('#today').onclick=()=>go(fmtDate(new Date()));
+
+/* ---------- attendance ---------- */
+function namesFor(day){const n=[...staff];day.rows.forEach(r=>{if(!n.includes(r.name))n.push(r.name)});return n}
+function renderAttendance(){
+  const day=getDay(cur);
+  $('#ot').value=day.ot||'';
+  const names=namesFor(day);
+  const head='<thead><tr><th>Name</th><th>Status</th><th>From</th><th>To</th><th>Break (h)</th><th class="num">Hours</th></tr></thead>';
+  const body=names.map(n=>{
+    const r=day.rows.find(x=>x.name===n)||{status:'A',from:'',to:'',brk:0};
+    const p=r.status==='P';
+    return `<tr data-n="${esc(n)}">
+      <td class="nm">${esc(n)}</td>
+      <td><select class="sel ${p?'p':'a'}" data-f="status" aria-label="Status of ${esc(n)}">
+        <option value="P" ${p?'selected':''}>Present</option><option value="A" ${p?'':'selected'}>Absent</option></select></td>
+      <td><input type="time" data-f="from" value="${esc(r.from)}" ${p?'':'disabled'} aria-label="From"></td>
+      <td><input type="time" data-f="to" value="${esc(r.to)}" ${p?'':'disabled'} aria-label="To"></td>
+      <td><input type="number" data-f="brk" min="0" step="0.25" value="${Number(r.brk)||0}" ${p?'':'disabled'} aria-label="Break hours"></td>
+      <td class="num hrs"><span data-h>${p?fh(hrs(r)):'0'}</span></td></tr>`}).join('')||'<tr><td colspan="6" class="sub">No people yet. Add names under “Manage people”.</td></tr>';
+  $('#people').innerHTML=head+'<tbody>'+body+'</tbody>';
+  $('#chips').innerHTML=staff.map((n,i)=>`<span class="chip">${esc(n)}<button data-i="${i}" title="Remove from list" aria-label="Remove ${esc(n)}">✕</button></span>`).join('')||'<span class="sub">No one added.</span>';
+  renderStats();
+}
+function renderStats(){
+  const day=getDay(cur);let p=0,t=0;
+  const names=namesFor(day);
+  names.forEach(n=>{const r=day.rows.find(x=>x.name===n);if(r&&r.status==='P'){p++;t+=hrs(r)}});
+  $('#sPresent').textContent=p;$('#sAbsent').textContent=names.length-p;$('#sHours').textContent=fh(t);
+}
+$('#people').addEventListener('change',e=>{
+  if(e.target.dataset.f!=='status')return;
+  const n=e.target.closest('tr').dataset.n,r=rowFor(getDay(cur),n);
+  r.status=e.target.value;
+  if(r.status==='P'){if(!r.from)r.from=DEF_FROM;if(!r.to)r.to=DEF_TO}
+  touch(cur);renderAttendance();
+});
+$('#people').addEventListener('input',e=>{
+  const f=e.target.dataset.f;if(!f||f==='status')return;
+  const card=e.target.closest('tr'),r=rowFor(getDay(cur),card.dataset.n);
+  r[f]=f==='brk'?Number(e.target.value)||0:e.target.value;
+  card.querySelector('[data-h]').textContent=fh(hrs(r));
+  renderStats();touch(cur);
+});
+$('#ot').addEventListener('input',e=>{getDay(cur).ot=Number(e.target.value)||0;touch(cur)});
+$('#addName').onclick=()=>{
+  const v=$('#newName').value.trim();if(!v||staff.includes(v))return;
+  staff.push(v);$('#newName').value='';saveStaff();renderAttendance();
+};
+$('#chips').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  staff.splice(+b.dataset.i,1);saveStaff();renderAttendance();
+});
+
+/* ---------- work log ---------- */
+function renderWork(){
+  const day=getDay(cur);
+  $('#note').value=day.note||'';
+  $('#entries').innerHTML=day.work.map((w,i)=>{
+    const units=UNITS.includes(w.unit)||!w.unit?UNITS:[...UNITS,w.unit];
+    return `<div class="entry" data-i="${i}">
+      <div class="ehead"><span>Entry ${i+1}</span><button class="x" data-act="delw">Remove</button></div>
+      <div class="egrid">
+        <div class="wide"><label class="f">Process</label><input type="text" list="procs" data-w="process" value="${esc(w.process)}" placeholder="e.g. Mixing"></div>
+        <div class="wide"><label class="f">Details</label><input type="text" data-w="detail" value="${esc(w.detail)}" placeholder="e.g. Material production to Telco"></div>
+        <div><label class="f">Size</label><input type="text" data-w="size" value="${esc(w.size)}" placeholder="e.g. 3.5mm"></div>
+        <div><label class="f">Quantity</label><input type="number" step="any" data-w="qty" value="${w.qty??''}"></div>
+        <div><label class="f">Unit</label><select data-w="unit">${units.map(u=>`<option ${u===w.unit?'selected':''}>${esc(u)}</option>`).join('')}</select></div>
+      </div></div>`}).join('')||'<div class="sub">No work entered for this day.</div>';
+}
+$('#entries').addEventListener('input',e=>{
+  const k=e.target.dataset.w;if(!k)return;
+  const w=getDay(cur).work[e.target.closest('.entry').dataset.i];
+  w[k]=k==='qty'?(e.target.value===''?'':Number(e.target.value)):e.target.value;touch(cur);
+});
+$('#entries').addEventListener('click',e=>{
+  if(!e.target.closest('[data-act=delw]'))return;
+  getDay(cur).work.splice(+e.target.closest('.entry').dataset.i,1);touch(cur);renderWork();
+});
+$('#addWork').onclick=()=>{getDay(cur).work.push({process:'',detail:'',size:'',qty:'',unit:'kg'});touch(cur);renderWork()};
+$('#note').addEventListener('input',e=>{getDay(cur).note=e.target.value;touch(cur)});
+
+function renderDaily(){renderAttendance();renderWork()}
+
+/* ---------- monthly ---------- */
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+function syncMonthBar(){
+  const yrs=new Set([new Date().getFullYear()-1,new Date().getFullYear(),new Date().getFullYear()+1,+month.slice(0,4)]);
+  Object.keys(days).forEach(d=>yrs.add(+d.slice(0,4)));
+  $('#mm').innerHTML=MONTHS.map((n,i)=>`<option value="${pad(i+1)}">${n}</option>`).join('');
+  $('#yy').innerHTML=[...yrs].sort().map(y=>`<option>${y}</option>`).join('');
+  $('#mm').value=month.slice(5);$('#yy').value=month.slice(0,4);
+}
+function renderYear(){
+  const y=month.slice(0,4);
+  $('#ytitle').textContent='Year overview · '+y;
+  const ms=[...Array(12)].map((_,i)=>{const mon=`${y}-${pad(i+1)}`;const d=monthData(mon);
+    const rec=d.rec.filter(Boolean).length;
+    return{mon,i,d,rec,P:d.per.reduce((a,p)=>a+p.pres,0),A:d.per.reduce((a,p)=>a+p.abs,0),H:d.per.reduce((a,p)=>a+p.tot,0),OT:d.ot.reduce((a,b)=>a+b,0)}});
+  let h='<thead><tr><th>Month</th><th class="num">Days recorded</th><th class="num">Present (man-days)</th><th class="num">Absent</th><th class="num">Hours</th><th class="num">OT</th></tr></thead><tbody>';
+  ms.forEach(m=>{h+=`<tr class="mrow ${m.mon===month?'cur':''}" data-m="${m.mon}"><td><b>${MONTHS[m.i]}</b></td><td class="num">${m.rec||'–'}</td><td class="num">${m.rec?m.P:'–'}</td><td class="num">${m.rec?m.A:'–'}</td><td class="num">${m.rec?fh(m.H):'–'}</td><td class="num">${m.OT?fh(m.OT):'–'}</td></tr>`});
+  h+=`</tbody><tfoot><tr><td>Total</td><td class="num">${ms.reduce((a,m)=>a+m.rec,0)}</td><td class="num">${ms.reduce((a,m)=>a+m.P,0)}</td><td class="num">${ms.reduce((a,m)=>a+m.A,0)}</td><td class="num">${fh(ms.reduce((a,m)=>a+m.H,0))}</td><td class="num">${fh(ms.reduce((a,m)=>a+m.OT,0))}</td></tr></tfoot>`;
+  $('#ymonths').innerHTML=h;
+  const names=[...staff];ms.forEach(m=>m.d.per.forEach(p=>{if(!names.includes(p.nm))names.push(p.nm)}));
+  let t='<thead><tr><th class="n">Name</th>'+MONTHS.map(n=>`<th class="num">${n.slice(0,3)}</th>`).join('')+'<th class="num">Total</th></tr></thead><tbody>';
+  names.forEach(nm=>{let tot=0,td=0;
+    t+=`<tr><td class="n">${esc(nm)}</td>`+ms.map(m=>{const p=m.d.per.find(x=>x.nm===nm);if(!p||!(p.pres+p.abs))return'<td class="num sub">–</td>';tot+=p.tot;td+=p.pres;return`<td class="num">${fh(p.tot)}<small class="dd">${p.pres}d</small></td>`}).join('')+`<td class="num tot">${fh(tot)}<small class="dd">${td}d</small></td></tr>`});
+  $('#ypeople').innerHTML=t+'</tbody>';
+}
+$('#ymonths').addEventListener('click',e=>{const r=e.target.closest('tr[data-m]');if(!r)return;month=r.dataset.m;renderMonthly();window.scrollTo({top:0,behavior:'smooth'})});
+$('#mm').onchange=()=>{month=$('#yy').value+'-'+$('#mm').value;renderMonthly()};
+$('#yy').onchange=()=>{month=$('#yy').value+'-'+$('#mm').value;renderMonthly()};
+let openP=new Set();
+const t12=t=>{if(!t)return'–';let[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+pad(m)+' '+ap};
+function monthData(mon){
+  const[y,m]=mon.split('-').map(Number),n=new Date(y,m,0).getDate();
+  const dates=[...Array(n)].map((_,i)=>`${mon}-${pad(i+1)}`);
+  const names=[...staff];
+  dates.forEach(d=>days[d]&&days[d].rows.forEach(r=>{if(!names.includes(r.name))names.push(r.name)}));
+  const rec=dates.map(d=>!!(days[d]&&days[d].rows.length));
+  const per=names.map(nm=>{
+    let tot=0,pres=0,abs=0;
+    const cells=dates.map((d,i)=>{
+      if(!rec[i])return{s:null};
+      const r=days[d].rows.find(x=>x.name===nm);
+      if(r&&r.status==='P'){const h=hrs(r);pres++;tot+=h;return{s:'P',h,from:r.from,to:r.to,brk:Number(r.brk)||0}}
+      abs++;return{s:'A'};
+    });
+    return{nm,tot,pres,abs,cells};
+  });
+  const ot=dates.map(d=>(days[d]&&Number(days[d].ot))||0);
+  const wk={};
+  dates.forEach(d=>days[d]&&days[d].work.forEach(w=>{
+    if(!w.process&&!w.detail&&w.qty==='')return;
+    const k=[w.process,w.detail,w.size,w.unit].map(s=>String(s||'').trim()).join('|');
+    (wk[k]=wk[k]||{process:w.process,detail:w.detail,size:w.size,unit:w.unit,qty:0,n:0});
+    wk[k].qty+=Number(w.qty)||0;wk[k].n++;
+  }));
+  return{dates,rec,per,ot,work:Object.values(wk)};
+}
+function renderMonthly(){
+  syncMonthBar();
+  $('#mtitle').textContent='Attendance sheet · '+MONTHS[+month.slice(5)-1]+' '+month.slice(0,4);
+  const{dates,rec,per,ot,work}=monthData(month);
+  const nRec=rec.filter(Boolean).length;
+  const totH=per.reduce((a,p)=>a+p.tot,0),totP=per.reduce((a,p)=>a+p.pres,0);
+  const tOT=ot.reduce((a,b)=>a+b,0);
+  const pct=nRec&&per.length?Math.round(totP/(nRec*per.length)*100):null;
+  $('#mstats').innerHTML=`<div class="stat"><span>Days recorded</span><b>${nRec}</b></div>
+    <div class="stat"><span>Total hours</span><b>${fh(totH)}</b></div>
+    <div class="stat"><span>Total OT</span><b>${fh(tOT)}</b></div>
+    <div class="stat"><span>Avg attendance</span><b>${pct===null?'–':pct+'%'}</b></div>`;
+
+  // attendance sheet
+  const dow=d=>parse(d).getDay();
+  let g='<thead><tr><th class="n">Name</th>'+dates.map(d=>`<th class="d ${dow(d)===0?'sun':''}">${+d.slice(8)}<small>${'SMTWTFS'[dow(d)]}</small></th>`).join('')+'<th class="num">P</th><th class="num">A</th><th class="num">Hours</th></tr></thead><tbody>';
+  per.forEach(p=>{g+=`<tr><td class="n">${esc(p.nm)}</td>`+p.cells.map((c,i)=>`<td class="d ${dow(dates[i])===0?'sun':''} ${c.s==='P'?'cp':c.s==='A'?'ca':''}">${c.s||''}</td>`).join('')+`<td class="num tot">${p.pres}</td><td class="num tot">${p.abs}</td><td class="num tot">${fh(p.tot)}</td></tr>`});
+  g+='</tbody><tfoot><tr><td class="n">Present</td>'+dates.map((d,i)=>`<td class="d">${rec[i]?per.filter(p=>p.cells[i].s==='P').length:''}</td>`).join('')+`<td class="num">${totP}</td><td class="num">${per.reduce((a,p)=>a+p.abs,0)}</td><td class="num">${fh(totH)}</td></tr>`;
+  g+='<tr><td class="n">OT</td>'+ot.map(x=>`<td class="d">${x?fh(x):''}</td>`).join('')+`<td class="num" colspan="3">${fh(tOT)}</td></tr></tfoot>`;
+  $('#mgrid').innerHTML=g;
+
+  // person-wise dropdowns
+  $('#mpeople').innerHTML=per.map(p=>{
+    const rows=dates.map((d,i)=>({d,c:p.cells[i]})).filter(x=>x.c.s);
+    const att=(p.pres+p.abs)?Math.round(p.pres/(p.pres+p.abs)*100):null;
+    let t='<div class="tw"><table><thead><tr><th>Date</th><th>Day</th><th>Status</th><th>From</th><th>To</th><th class="num">Break (h)</th><th class="num">Hours</th></tr></thead><tbody>';
+    rows.forEach(({d,c})=>{t+=`<tr><td>${show(d)}</td><td>${DAYS[dow(d)]}</td><td class="${c.s==='P'?'cp':'ca'}">${c.s==='P'?'Present':'Absent'}</td><td>${c.s==='P'?t12(c.from):'–'}</td><td>${c.s==='P'?t12(c.to):'–'}</td><td class="num">${c.s==='P'?fh(c.brk):'–'}</td><td class="num">${c.s==='P'?fh(c.h):'–'}</td></tr>`});
+    if(!rows.length)t+='<tr><td colspan="7" class="sub">No entries this month.</td></tr>';
+    t+=`</tbody><tfoot><tr><td colspan="2">Total</td><td>${p.pres} present, ${p.abs} absent</td><td colspan="3"></td><td class="num">${fh(p.tot)}</td></tr></tfoot></table></div>`;
+    return `<details class="pdet" data-n="${esc(p.nm)}" ${openP.has(p.nm)?'open':''}><summary>
+      <span class="pname2">${esc(p.nm)}</span>
+      <span class="tg ok">Present ${p.pres}</span><span class="tg bad">Absent ${p.abs}</span>
+      <span class="tg">Hours ${fh(p.tot)}</span>
+      <span class="tg">Avg ${p.pres?fh(p.tot/p.pres):'–'} h/day</span>
+      <span class="tg">Attendance ${att===null?'–':att+'%'}</span></summary>${t}</details>`}).join('')||'<div class="sub">No people yet.</div>';
+
+  let w='<thead><tr><th>Process</th><th>Details</th><th>Size</th><th class="num">Total qty</th><th>Unit</th><th class="num">Entries</th></tr></thead><tbody>';
+  work.forEach(x=>{w+=`<tr><td>${esc(x.process)}</td><td>${esc(x.detail)}</td><td>${esc(x.size)}</td><td class="num tot">${fh(x.qty)}</td><td>${esc(x.unit)}</td><td class="num">${x.n}</td></tr>`});
+  if(!work.length)w+='<tr><td colspan="6" class="sub">No work entries this month.</td></tr>';
+  $('#mwork').innerHTML=w+'</tbody>';
+  renderYear();
+  return{per};
+}
+$('#mpeople').addEventListener('toggle',e=>{const d=e.target;if(!d.classList||!d.classList.contains('pdet'))return;d.open?openP.add(d.dataset.n):openP.delete(d.dataset.n)},true);
+function shiftMonth(k){const[y,m]=month.split('-').map(Number);const d=new Date(y,m-1+k,1);month=d.getFullYear()+'-'+pad(d.getMonth()+1);renderMonthly()}
+$('#mprev').onclick=()=>shiftMonth(-1);$('#mnext').onclick=()=>shiftMonth(1);
+$('#copy').onclick=async()=>{
+  const{per}=renderMonthly();
+  const txt='Nafdist Pvt Ltd, '+month+'\nName\tPresent\tAbsent\tHours\n'+per.map(p=>`${p.nm}\t${p.pres}\t${p.abs}\t${fh(p.tot)}`).join('\n');
+  try{await navigator.clipboard.writeText(txt);$('#copied').textContent='Copied'}catch(e){$('#copied').textContent='Copy not allowed here'}
+  setTimeout(()=>$('#copied').textContent='',2500);
+};
+
+/* ---------- navigation ---------- */
+function setView(v){
+  view=v;
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  $('#attendance').classList.toggle('hide',v!=='attendance');
+  $('#work').classList.toggle('hide',v!=='work');
+  $('#monthly').classList.toggle('hide',v!=='monthly');
+  $('#datecard').classList.toggle('hide',v==='monthly');
+  if(v==='monthly'){month=cur.slice(0,7);renderMonthly()}else renderDaily();
+}
+document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+
+/* ---------- storage ---------- */
+function refresh(){
+  if(view==='monthly')return renderMonthly();
+  const a=document.activeElement;
+  if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&a.closest('#attendance,#work'))return;
+  renderDaily();
+}
+syncDateBar();renderDaily();
+let pw='';try{pw=localStorage.getItem('nafdist_pw')||''}catch(e){}
+async function req(method,url,body){
+  const r=await fetch(url,{method,headers:{'Content-Type':'application/json','x-app-password':pw},body:body?JSON.stringify(body):undefined});
+  if(r.status===401){const e=new Error('unauthorized');e.code='unauthorized';throw e}
+  if(!r.ok){const e=new Error('http');e.code='http_'+r.status;throw e}
+  return r.json();
+}
+function showLogin(wrong){
+  $('#login').classList.remove('hide');
+  $('#loginerr').textContent=wrong?'Wrong password. Try again.':'';
+  setStatus('Password needed');
+  setTimeout(()=>$('#pw').focus(),50);
+}
+$('#loginform').addEventListener('submit',e=>{
+  e.preventDefault();
+  pw=$('#pw').value;try{localStorage.setItem('nafdist_pw',pw)}catch(x){}
+  load(true);
+});
+async function load(fromLogin){
+  try{
+    const d=await req('GET','/api/data');
+    staff=d.staff||[];
+    (d.days||[]).forEach(x=>{if(!isDirty(x.date)&&!busy[x.date]){days[x.date]={date:x.date,rows:x.rows||[],ot:x.ot||0,work:x.work||[],note:x.note||''}}});
+    $('#login').classList.add('hide');
+    if(!isDirty(cur)&&!Object.values(busy).some(Boolean))setStatus('Ready');
+    refresh();
+  }catch(e){
+    if(e.code==='unauthorized')showLogin(fromLogin===true);
+    else setStatus('Cannot reach the server. Retrying…');
+  }
+}
+load();
+setInterval(()=>{if(!document.hidden)load()},20000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
+</script>
+</body>
+</html>
